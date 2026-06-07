@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta charset="UTF-8">
     <title>Panopticore Keven IA Pro</title>
     <style>
-        body { margin: 0; background: black; font-family: monospace; color: #00FF00; overflow: hidden; height: 100vh; }
+        body { margin: 0; background: black; font-family: monospace; color: #00FF00; overflow: hidden; height: 100vh; user-select: none; }
         
         /* Câmera e Canvas */
         #webcam { position: fixed; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; display: none; }
@@ -23,7 +23,7 @@
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
         /* Menu de Três Pontinhos */
-        .menu-container { position: fixed; bottom: 15px; right: 15px; z-index: 20; }
+        .menu-container { position: fixed; bottom: 15px; right: 15px; z-index: 40; }
         .btn-menu { background: rgba(0,0,0,0.8); border: 1px solid #00FF00; color: #00FF00; font-size: 20px; padding: 5px 12px; border-radius: 4px; cursor: pointer; }
         .menu-opcoes { position: absolute; bottom: 40px; right: 0; background: rgba(5,5,5,0.95); border: 1px solid #00FF00; display: none; flex-direction: column; min-width: 180px; }
         .menu-opcoes button { background: transparent; border: none; color: #00FF00; padding: 10px; text-align: left; font-size: 13px; cursor: pointer; font-family: monospace; border-bottom: 1px solid #111; }
@@ -39,15 +39,19 @@
         #radar-overlay::after { content: ''; position: absolute; left: 50%; top: 0; width: 1px; height: 100%; background: rgba(0,255,0,0.3); }
         #mira-centro { position: fixed; top: 50%; left: 50%; width: 12px; height: 12px; transform: translate(-50%, -50%); border: 2px solid #00FF00; border-radius: 50%; z-index: 6; pointer-events: none; display: none; }
 
-        /* Painel de Zoom Digital Superior */
-        #zoom-container { position: fixed; top: 15px; left: 15px; right: 15px; display: none; gap: 10px; overflow-x: auto; z-index: 30; padding-bottom: 5px; }
-        .zoom-box { width: 75px; height: 75px; background: rgba(0,20,0,0.8); border: 1px solid #00FF00; flex-shrink: 0; position: relative; border-radius: 3px; overflow: hidden; }
-        .zoom-box canvas { width: 100%; height: 100%; position: relative; z-index: 1; }
-        .zoom-label { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.75); color: #00FF00; font-size: 8px; text-align: center; z-index: 2; padding: 1px 0; }
+        /* Contêiner de Janelas de Zoom Flutuantes/Movíveis */
+        .zoom-box { position: fixed; width: 95px; height: 95px; background: rgba(0,20,0,0.85); border: 1px solid #00FF00; z-index: 30; border-radius: 4px; overflow: hidden; touch-action: none; cursor: move; box-shadow: 0 0 10px rgba(0,255,0,0.3); }
+        .zoom-box canvas { width: 100%; height: 100%; display: block; }
+        .zoom-label { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.8); color: #00FF00; font-size: 8px; text-align: center; padding: 2px 0; font-weight: bold; border-top: 1px solid rgba(0,255,0,0.3); }
+
+        /* Terminal Console Virtual (Canto Esquerdo Inferior) */
+        #console-militar { position: fixed; bottom: 15px; left: 15px; width: 260px; height: 105px; background: rgba(0, 15, 0, 0.85); border: 1px solid #00FF00; z-index: 40; border-radius: 4px; padding: 8px; box-shadow: 0 0 15px rgba(0,255,0,0.2); pointer-events: none; box-sizing: border-box; }
+        .console-titulo { font-size: 10px; font-weight: bold; border-bottom: 1px solid #00FF00; padding-bottom: 4px; margin-bottom: 6px; text-transform: lowercase; letter-spacing: 0.5px; }
+        .console-linha { font-size: 9px; line-height: 1.4; color: #00FF00; opacity: 0.9; }
     </style>
 
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
@@ -68,7 +72,14 @@
         <button class="btn-fechar" onclick="fecharSobre()">FECHAR RECORDE</button>
     </div>
 
-    <div id="zoom-container"></div>
+    <div id="container-zooms-moveis"></div>
+
+    <div id="console-militar" style="display: none;">
+        <div class="console-titulo">aproveite funcionando com sucesso</div>
+        <div class="console-linha" id="log-status">STATUS: BUSCANDO ALVOS...</div>
+        <div class="console-linha" id="log-coordenadas">COORD: X:000 Y:000</div>
+        <div class="console-linha" id="log-fps">FPS DISPOSITIVO: -- FPS</div>
+    </div>
 
     <div class="menu-container" id="container-menu" style="display: none;">
         <button class="btn-menu" onclick="alternarMenu()">...</button>
@@ -93,20 +104,28 @@
         const video = document.getElementById('webcam');
         const canvas = document.getElementById('output');
         const ctx = canvas.getContext('2d');
-        const zoomContainer = document.getElementById('zoom-container');
+        const containerZooms = document.getElementById('container-zooms-moveis');
         
         let modeloCOCO = null;
-        let rastreadorMediaPipe = null;
+        let rastreadorMediaPipePose = null;
         
         let localStream = null;
         let cameraAtual = 'environment';
         let sistemaIniciado = false;
-        let modoOperacao = 'multiplo'; // 'multiplo' (COCO-SSD) ou 'unico' (MediaPipe)
+        let modoOperacao = 'multiplo'; 
         
-        let dadosMediaPipe = null;
+        let dadosPose = null;
+        let alvosAtivosDesteFrame = [];
+
+        // Posições padrões salvas para os boxes flutuantes não resetarem ao mover
+        let posicoesSalvasBoxes = {
+            "box_0": { x: 20, y: 20 },
+            "box_1": { x: 130, y: 20 },
+            "box_2": { x: 240, y: 20 }
+        };
 
         const alvosMilitar = {
-            'person': 'HUMAN', 'car': 'VEHICLE', 'truck': 'VEHICLE', 'bus': 'VEHICLE',
+            'person': 'HUMAN_TARGET', 'car': 'VEHICLE', 'truck': 'VEHICLE', 'bus': 'VEHICLE',
             'motorcycle': 'VEHICLE_2W', 'bicycle': 'VEHICLE_2W', 'bird': 'AIR_TARGET',
             'cat': 'ANIMAL_CAT', 'dog': 'ANIMAL_DOG'
         };
@@ -116,15 +135,19 @@
             document.getElementById('tela-carregamento').style.display = 'flex';
             
             try {
-                // Carrega o COCO-SSD como padrão inicial
                 modeloCOCO = await cocoSsd.load();
                 
-                // Inicializa o MediaPipe em segundo plano para quando alternar
-                rastreadorMediaPipe = new Hands({
-                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+                // Configuração do MediaPipe Pose corrigida para rastrear corpo inteiro perfeitamente
+                rastreadorMediaPipePose = new Pose({
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
                 });
-                rastreadorMediaPipe.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
-                rastreadorMediaPipe.onResults((results) => { dadosMediaPipe = results; });
+                rastreadorMediaPipePose.setOptions({
+                    modelComplexity: 1,
+                    smoothLandmarks: true,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
+                rastreadorMediaPipePose.onResults((results) => { dadosPose = results; });
 
                 await iniciarCamera(cameraAtual);
                 
@@ -133,12 +156,12 @@
                 document.getElementById('radar-overlay').style.display = 'block';
                 document.getElementById('mira-centro').style.display = 'block';
                 document.getElementById('container-menu').style.display = 'block';
-                zoomContainer.style.display = 'flex';
+                document.getElementById('console-militar').style.display = 'block';
                 
                 sistemaIniciado = true;
                 loopProcessamento();
             } catch (erro) {
-                alert("Erro ao inicializar sensores: " + erro);
+                alert("Erro ao inicializar sensores táticos: " + erro);
             }
         }
 
@@ -164,14 +187,18 @@
             const btn = document.getElementById('btn-alternar-modo');
             if (modoOperacao === 'multiplo') {
                 modoOperacao = 'unico';
-                btn.innerText = 'RASTREAMENTO MÚLTIPLO';
+                btn.innerText = 'VOLTAR P/ MÚLTIPLO';
             } else {
                 modoOperacao = 'multiplo';
                 btn.innerText = 'RASTREAMENTO ÚNICO';
-                dadosMediaPipe = null;
+                dadosPose = null;
             }
-            zoomContainer.innerHTML = '';
+            containerZooms.innerHTML = '';
         }
+
+        let ultimoTime = performance.now();
+        let frameContador = 0;
+        let fpsExibido = 60;
 
         async function loopProcessamento() {
             if (video.readyState >= 2 && sistemaIniciado) {
@@ -179,32 +206,38 @@
                 canvas.height = video.videoHeight;
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 
-                // Gerencia a limpeza de miniaturas antigas de zoom
-                zoomContainer.innerHTML = '';
+                alvosAtivosDesteFrame = [];
+
+                // Cálculo do FPS Real do Dispositivo
+                frameContador++;
+                let agora = performance.now();
+                if (agora >= ultimoTime + 1000) {
+                    fpsExibido = Math.round((frameContador * 1000) / (agora - ultimoTime));
+                    frameContador = 0;
+                    ultimoTime = agora;
+                }
 
                 if (modoOperacao === 'multiplo') {
-                    // MODO MÚLTIPLO REGULAR (COCO-SSD)
                     if (modeloCOCO) {
                         const predicoes = await modeloCOCO.detect(video);
-                        
-                        predicoes.forEach((objeto, idx) => {
-                            if (alvosMilitar[objeto.class]) {
+                        let indexBox = 0;
+                        predicoes.forEach((objeto) => {
+                            if (alvosMilitar[objeto.class] && indexBox < 3) {
                                 let tagAlvo = alvosMilitar[objeto.class];
                                 const [x, y, largura, altura] = objeto.bbox;
                                 
-                                desenharMiraMilitar(x, y, largura, altura, `TRK_${idx + 100}`, tagAlvo, objeto.score);
-                                criarMiniaturaZoom(x, y, largura, altura, tagAlvo);
+                                alvosAtivosDesteFrame.push({ x, y, w: largura, h: altura, label: tagAlvo, id: `TRK_${indexBox + 100}`, score: objeto.score });
+                                indexBox++;
                             }
                         });
                     }
                 } else {
-                    // MODO ÚNICO APERFEIÇOADO (MediaPipe Engine de Alta Velocidade)
-                    await rastreadorMediaPipe.send({ image: video });
+                    // MODO ÚNICO APERFEIÇOADO (Rastreamento de Esqueleto com MediaPipe Pose)
+                    await rastreadorMediaPipePose.send({ image: video });
                     
-                    if (dadosMediaPipe && dadosMediaPipe.multiHandLandmarks && dadosMediaPipe.multiHandLandmarks.length > 0) {
-                        const pontos = dadosMediaPipe.multiHandLandmarks[0];
+                    if (dadosPose && dadosPose.poseLandmarks && dadosPose.poseLandmarks.length > 0) {
+                        let pontos = dadosPose.poseLandmarks;
                         
-                        // Calcula o bounding box ao redor do alvo único detectado
                         let minX = canvas.width, maxX = 0, minY = canvas.height, maxY = 0;
                         pontos.forEach(p => {
                             let px = p.x * canvas.width;
@@ -213,87 +246,120 @@
                             if (py < minY) minY = py; if (py > maxY) maxY = py;
                         });
 
-                        // Adiciona uma margem tática ao redor do ponto fixado
-                        let largura = (maxX - minX) * 1.5;
-                        let altura = (maxY - minY) * 1.5;
-                        let x = minX - (largura * 0.15);
-                        let y = minY - (altura * 0.15);
+                        let larguraCorpo = (maxX - minX);
+                        let alturaCorpo = (maxY - minY);
+                        
+                        // Margem de segurança dinâmica adaptável
+                        let w = larguraCorpo > 0 ? larguraCorpo * 1.4 : 180;
+                        let h = alturaCorpo > 0 ? alturaCorpo * 1.3 : 240;
+                        let x = minX - (w * 0.15);
+                        let y = minY - (h * 0.15);
 
-                        desenharMiraMilitar(x, y, largura, altura, "SINGLE_LOCK", "HUMAN_TARGET", 0.99);
-                        criarMiniaturaZoom(x, y, largura, altura, "TARGET_LOCK");
+                        alvosAtivosDesteFrame.push({ x, y, w, h, label: "SINGLE_LOCK", id: "BODY_CORE", score: 0.99 });
+
+                        // Desenhar os pontos do esqueleto em verde na tela
+                        pontos.forEach(p => {
+                            if(p.visibility > 0.5) {
+                                ctx.fillStyle = '#00FF00';
+                                ctx.beginPath();
+                                ctx.arc(p.x * canvas.width, p.y * canvas.height, 3, 0, Math.PI * 2);
+                                ctx.fill();
+                            }
+                        });
                     }
                 }
+
+                // Renderização e engenharia de desenho/linhas conectores de zoom
+                renderizarInterfaceGraficaEJanelas();
             }
             requestAnimationFrame(loopProcessamento);
         }
 
-        function desenharMiraMilitar(x, y, w, h, id, tag, score) {
-            const centroX = x + (w / 2);
-            const centroY = y + (h / 2);
+        function renderizarInterfaceGraficaEJanelas() {
+            // Atualiza os dados do console militar inferior esquerdo
+            const logStatus = document.getElementById('log-status');
+            const logCoord = document.getElementById('log-coordenadas');
+            const logFps = document.getElementById('log-fps');
 
-            ctx.strokeStyle = '#00FF00';
-            ctx.lineWidth = 1.2;
-            ctx.strokeRect(x, y, w, h);
-            
-            // Ângulos destacados nos quatro cantos
-            ctx.fillStyle = '#00FF00';
-            ctx.fillRect(x, y, 8, 2); ctx.fillRect(x, y, 2, 8);
-            ctx.fillRect(x + w - 8, y, 8, 2); ctx.fillRect(x + w, y, 2, 8);
-            ctx.fillRect(x, y + h, 8, 2); ctx.fillRect(x, y + h - 8, 2, 8);
-            ctx.fillRect(x + w - 8, y + h, 8, 2); ctx.fillRect(x + w + 2, y + h - 8, 2, 8);
+            logFps.innerText = `FPS DISPOSITIVO: ${fpsExibido} FPS // STABLE`;
 
-            // Tags textuais informativas
-            ctx.font = '10px monospace';
-            ctx.fillText(`${id} // ${tag} [${Math.round(score * 100)}%]`, x + 3, y - 6);
-            
-            // Ponto de Retícula interno
-            ctx.beginPath(); ctx.arc(centroX, centroY, 3, 0, Math.PI * 2); ctx.fill();
-
-            // Linha Conectora Estética apontada para o Centro da Tela
-            ctx.strokeStyle = 'rgba(0, 255, 0, 0.15)';
-            ctx.beginPath(); ctx.moveTo(centroX, centroY); ctx.lineTo(canvas.width / 2, canvas.height / 2); ctx.stroke();
-        }
-
-        // ENGENHARIA DE ZOOM DIGITAL EM TEMPO REAL
-        function criarMiniaturaZoom(x, y, w, h, etiqueta) {
-            // Cria os elementos do box dinamicamente
-            const box = document.createElement('div');
-            box.className = 'zoom-box';
-            
-            const miniCanvas = document.createElement('canvas');
-            miniCanvas.width = 75;
-            miniCanvas.height = 75;
-            
-            const label = document.createElement('div');
-            label.className = 'zoom-label';
-            label.innerText = etiqueta;
-
-            box.appendChild(miniCanvas);
-            box.appendChild(label);
-            zoomContainer.appendChild(box);
-
-            const mCtx = miniCanvas.getContext('2d');
-            
-            // Proteção contra caixas fora da área visível da câmera
-            if (w > 0 && h > 0) {
-                mCtx.clearRect(0, 0, 75, 75);
-                // drawImage(imagemOriginal, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight)
-                // Pega a região exata do vídeo da câmera e joga esticando no tamanho do mini mini-canvas
-                mCtx.drawImage(video, x, y, w, h, 0, 0, 75, 75);
+            if(alvosAtivosDesteFrame.length === 0) {
+                logStatus.innerText = "STATUS: BUSCANDO ALVOS...";
+                logStatus.style.color = "#00FF00";
+                logCoord.innerText = "COORD: X:000 Y:000";
+                
+                // Remove caixas se nada for detectado
+                containerZooms.innerHTML = '';
+                return;
             }
-        }
 
-        function alternarMenu() {
-            const m = document.getElementById('menu-opcoes');
-            m.style.display = m.style.display === 'flex' ? 'none' : 'flex';
-        }
-        function abrirSobre() {
-            alternarMenu();
-            document.getElementById('painel-sobre').style.display = 'block';
-        }
-        function fecharSobre() {
-            document.getElementById('painel-sobre').style.display = 'none';
-        }
-    </script>
-</body>
-</html>
+            logStatus.innerText = `STATUS: TARGET LOCKED [${alvosAtivosDesteFrame.length}]`;
+            logStatus.style.color = "#00FF00";
+
+            alvosAtivosDesteFrame.forEach((alvo, idx) => {
+                const centroX = alvo.x + (alvo.w / 2);
+                const centroY = alvo.y + (alvo.h / 2);
+
+                if (idx === 0) {
+                    logCoord.innerText = `COORD: X:${Math.round(centroX)} Y:${Math.round(centroY)}`;
+                }
+
+                // 1. DESENHAR MIRA EXTERNA VERDE NO CORPO/ALVO
+                ctx.strokeStyle = '#00FF00';
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(alvo.x, alvo.y, alvo.w, alvo.h);
+                
+                // Cantos Angulares Destacados
+                ctx.fillStyle = '#00FF00';
+                ctx.fillRect(alvo.x, alvo.y, 10, 2); ctx.fillRect(alvo.x, alvo.y, 2, 10);
+                ctx.fillRect(alvo.x + alvo.w - 10, alvo.y, 10, 2); ctx.fillRect(alvo.x + alvo.w, alvo.y, 2, 10);
+                ctx.fillRect(alvo.x, alvo.y + alvo.h, 10, 2); ctx.fillRect(alvo.x, alvo.y + alvo.h - 10, 2, 10);
+                ctx.fillRect(alvo.x + alvo.w - 10, alvo.y + alvo.h, 10, 2); ctx.fillRect(alvo.x + alvo.w + 1, alvo.y + alvo.h - 10, 2, 10);
+
+                ctx.font = 'bold 10px monospace';
+                ctx.fillText(`${alvo.id} // ${alvo.label}`, alvo.x + 4, alvo.y - 6);
+                ctx.beginPath(); ctx.arc(centroX, centroY, 3, 0, Math.PI * 2); ctx.fill();
+
+                // 2. ENGENHARIA DO ELEMENTO DE ZOOM ARRASTÁVEL
+                let idBox = `box_${idx}`;
+                let boxElement = document.getElementById(idBox);
+
+                if (!boxElement) {
+                    // Instancia a caixinha se ela não existir na tela
+                    boxElement = document.createElement('div');
+                    boxElement.id = idBox;
+                    boxElement.className = 'zoom-box';
+                    
+                    // Define a posição salva inicial para evitar teleportes
+                    boxElement.style.left = `${posPositionsInicial(idBox).x}px`;
+                    boxElement.style.top = `${posPositionsInicial(idBox).y}px`;
+
+                    const canvasMini = document.createElement('canvas');
+                    canvasMini.width = 95;
+                    canvasMini.height = 95;
+
+                    const labelMini = document.createElement('div');
+                    labelMini.className = 'zoom-label';
+                    labelMini.innerText = `V-ZOOM ${idx+1}`;
+
+                    boxElement.appendChild(canvasMini);
+                    boxElement.appendChild(labelMini);
+                    containerZooms.appendChild(boxElement);
+
+                    configurarArrastoSuave(boxElement, idBox);
+                }
+
+                // Renderiza o recorte ampliado (Zoom Digital) dentro do Canvas da caixinha correspondente
+                const canvasDoBox = boxElement.querySelector('canvas');
+                const ctxDoBox = canvasDoBox.getContext('2d');
+                if (alvo.w > 0 && alvo.h > 0) {
+                    ctxDoBox.clearRect(0, 0, 95, 95);
+                    ctxDoBox.drawImage(video, alvo.x, alvo.y, alvo.w, alvo.h, 0, 0, 95, 95);
+                }
+
+                // 3. DESENHAR A LINHA DO DETECTOR ATÉ A CAIXINHA DE ZOOM DELE
+                let rectBox = boxElement.getBoundingClientRect();
+                let boxCentroX = rectBox.left + (rectBox.width / 2);
+                let boxCentroY = rectBox.top + (rectBox.height / 2);
+
+                // Converter coordenadas de tela (DOM) par
