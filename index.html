@@ -25,7 +25,7 @@
         /* Menu de Três Pontinhos */
         .menu-container { position: fixed; bottom: 15px; right: 15px; z-index: 20; }
         .btn-menu { background: rgba(0,0,0,0.8); border: 1px solid #00FF00; color: #00FF00; font-size: 20px; padding: 5px 12px; border-radius: 4px; cursor: pointer; }
-        .menu-opcoes { position: absolute; bottom: 40px; right: 0; background: rgba(5,5,5,0.95); border: 1px solid #00FF00; display: none; flex-direction: column; min-width: 140px; }
+        .menu-opcoes { position: absolute; bottom: 40px; right: 0; background: rgba(5,5,5,0.95); border: 1px solid #00FF00; display: none; flex-direction: column; min-width: 180px; }
         .menu-opcoes button { background: transparent; border: none; color: #00FF00; padding: 10px; text-align: left; font-size: 13px; cursor: pointer; font-family: monospace; border-bottom: 1px solid #111; }
         .menu-opcoes button:active { background: #00FF00; color: black; }
 
@@ -33,9 +33,21 @@
         #painel-sobre { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; max-width: 320px; background: rgba(0, 10, 0, 0.95); border: 2px solid #00FF00; box-shadow: 0 0 20px rgba(0,255,0,0.5); padding: 15px; z-index: 150; display: none; font-size: 11px; line-height: 1.4; text-align: justify; }
         .btn-fechar { background: transparent; border: 1px solid #00FF00; color: #00FF00; padding: 5px 10px; display: block; margin: 15px auto 0 auto; cursor: pointer; font-family: monospace; }
 
-        /* Grade do Radar de Fundo */
-        #radar-overlay { position: fixed; top: 50%; left: 50%; width: 280px; height: 280px; transform: translate(-50%, -50%); border: 1px solid rgba(0, 255, 0, 0.12); border-radius: 50%; z-index: 5; pointer-events: none; display: none; }
+        /* Grade do Radar de Fundo (Bolota Grande e Mira) */
+        #radar-overlay { position: fixed; top: 50%; left: 50%; width: 290px; height: 290px; transform: translate(-50%, -50%); border: 2px solid rgba(0, 255, 0, 0.35); border-radius: 50%; z-index: 5; pointer-events: none; display: none; box-shadow: inset 0 0 15px rgba(0,255,0,0.1); }
+        #radar-overlay::before { content: ''; position: absolute; top: 50%; left: 0; width: 100%; height: 1px; background: rgba(0,255,0,0.3); }
+        #radar-overlay::after { content: ''; position: absolute; left: 50%; top: 0; width: 1px; height: 100%; background: rgba(0,255,0,0.3); }
+        #mira-centro { position: fixed; top: 50%; left: 50%; width: 12px; height: 12px; transform: translate(-50%, -50%); border: 2px solid #00FF00; border-radius: 50%; z-index: 6; pointer-events: none; display: none; }
+
+        /* Painel de Zoom Digital Superior */
+        #zoom-container { position: fixed; top: 15px; left: 15px; right: 15px; display: none; gap: 10px; overflow-x: auto; z-index: 30; padding-bottom: 5px; }
+        .zoom-box { width: 75px; height: 75px; background: rgba(0,20,0,0.8); border: 1px solid #00FF00; flex-shrink: 0; position: relative; border-radius: 3px; overflow: hidden; }
+        .zoom-box canvas { width: 100%; height: 100%; position: relative; z-index: 1; }
+        .zoom-label { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.75); color: #00FF00; font-size: 8px; text-align: center; z-index: 2; padding: 1px 0; }
     </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
@@ -51,23 +63,28 @@
 
     <div id="painel-sobre">
         <div style="font-weight: bold; text-align: center; margin-bottom: 10px; border-bottom: 1px dashed #00FF00; padding-bottom: 5px;">SISTEMA PANOPTICORE // INFORMAÇÕES</div>
-        Este site utiliza um pipeline de visão computacional otimizado para dispositivos móveis de alta performance.<br><br>
-        A Inteligência Artificial (COCO-SSD) executa uma varredura inicial em tempo de disparo único apenas para identificar e categorizar os alvos estratégicos na imagem. Uma vez fixadas as coordenadas iniciais, a IA cede o controle para algoritmos matemáticos e vetoriais de rastreamento contínuo por software. Isso garante taxa estável de 60 FPS cravados sem sobrecarga térmica ou drenagem de bateria do dispositivo.
+        Este site utiliza um pipeline tático de varredura visual alternável.<br><br>
+        O Modo Múltiplo padrão faz uso do ecossistema TensorFlow COCO-SSD para indexação simultânea de alvos gerais. O Modo Único desliga a varredura primária e concentra toda a aceleração gráfica no MediaPipe Engine, fornecendo rastreamento de alvos dinâmicos com precisão milimétrica e menor tempo de resposta no hardware.
         <button class="btn-fechar" onclick="fecharSobre()">FECHAR RECORDE</button>
     </div>
+
+    <div id="zoom-container"></div>
 
     <div class="menu-container" id="container-menu" style="display: none;">
         <button class="btn-menu" onclick="alternarMenu()">...</button>
         <div class="menu-opcoes" id="menu-opcoes">
-            <button onclick="mudarCamera('user')">FRONT LENS</button>
-            <button onclick="mudarCamera('environment')">REAR LENS</button>
-            <button onclick="abrirSobre()">ABOUT SYSTEM</button>
+            <button onclick="mudarCamera('user')">CÂMERA FRONTAL</button>
+            <button onclick="mudarCamera('environment')">CÂMERA TRASEIRA</button>
+            <button id="btn-alternar-modo" onclick="alternarModoVarredura()">RASTREAMENTO ÚNICO</button>
+            <button onclick="abrirSobre()">SOBRE NÓS</button>
         </div>
     </div>
 
     <video id="webcam" autoplay playsinline muted></video>
     <canvas id="output"></canvas>
+    
     <div id="radar-overlay"></div>
+    <div id="mira-centro"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
@@ -76,61 +93,52 @@
         const video = document.getElementById('webcam');
         const canvas = document.getElementById('output');
         const ctx = canvas.getContext('2d');
+        const zoomContainer = document.getElementById('zoom-container');
         
-        let modeloAI = null;
+        let modeloCOCO = null;
+        let rastreadorMediaPipe = null;
+        
         let localStream = null;
         let cameraAtual = 'environment';
         let sistemaIniciado = false;
+        let modoOperacao = 'multiplo'; // 'multiplo' (COCO-SSD) ou 'unico' (MediaPipe)
         
-        let particulas = [];
-        let alvosRastreados = []; // Guarda os objetos que o sistema continuará acompanhando de forma leve
-        let frameCount = 0;
+        let dadosMediaPipe = null;
 
         const alvosMilitar = {
-            'person': 'HUMAN',
-            'car': 'VEHICLE',
-            'truck': 'VEHICLE',
-            'bus': 'VEHICLE',
-            'motorcycle': 'VEHICLE_2W',
-            'bicycle': 'VEHICLE_2W',
-            'bird': 'AIR_TARGET',
-            'cat': 'ANIMAL_CAT',
-            'dog': 'ANIMAL_DOG'
+            'person': 'HUMAN', 'car': 'VEHICLE', 'truck': 'VEHICLE', 'bus': 'VEHICLE',
+            'motorcycle': 'VEHICLE_2W', 'bicycle': 'VEHICLE_2W', 'bird': 'AIR_TARGET',
+            'cat': 'ANIMAL_CAT', 'dog': 'ANIMAL_DOG'
         };
-
-        class Particula {
-            constructor(x, y) {
-                this.x = x; this.y = y;
-                this.vx = (Math.random() - 0.5) * 4;
-                this.vy = (Math.random() - 0.5) * 4;
-                this.tamanho = Math.random() * 3 + 1.5;
-                this.vida = 1.0;
-                this.decaimento = Math.random() * 0.05 + 0.04;
-            }
-            atualizar() { this.x += this.vx; this.y += this.vy; this.vida -= this.decaimento; }
-            desenhar() {
-                ctx.save(); ctx.globalAlpha = this.vida; ctx.fillStyle = '#00FF00';
-                ctx.beginPath(); ctx.arc(this.x, this.y, this.tamanho, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-            }
-        }
 
         async function acionarSistema() {
             document.getElementById('tela-inicial').style.display = 'none';
             document.getElementById('tela-carregamento').style.display = 'flex';
             
             try {
-                modeloAI = await cocoSsd.load();
+                // Carrega o COCO-SSD como padrão inicial
+                modeloCOCO = await cocoSsd.load();
+                
+                // Inicializa o MediaPipe em segundo plano para quando alternar
+                rastreadorMediaPipe = new Hands({
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+                });
+                rastreadorMediaPipe.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+                rastreadorMediaPipe.onResults((results) => { dadosMediaPipe = results; });
+
                 await iniciarCamera(cameraAtual);
                 
                 document.getElementById('tela-carregamento').style.display = 'none';
                 video.style.display = 'block';
                 document.getElementById('radar-overlay').style.display = 'block';
+                document.getElementById('mira-centro').style.display = 'block';
                 document.getElementById('container-menu').style.display = 'block';
+                zoomContainer.style.display = 'flex';
                 
                 sistemaIniciado = true;
                 loopProcessamento();
             } catch (erro) {
-                alert("Erro ao iniciar sensores táticos: " + erro);
+                alert("Erro ao inicializar sensores: " + erro);
             }
         }
 
@@ -148,8 +156,21 @@
             alternarMenu();
             if(!sistemaIniciado) return;
             cameraAtual = modo;
-            alvosRastreados = []; // Reseta o rastreador antigo ao mudar de câmera
             await iniciarCamera(modo);
+        }
+
+        function alternarModoVarredura() {
+            alternarMenu();
+            const btn = document.getElementById('btn-alternar-modo');
+            if (modoOperacao === 'multiplo') {
+                modoOperacao = 'unico';
+                btn.innerText = 'RASTREAMENTO MÚLTIPLO';
+            } else {
+                modoOperacao = 'multiplo';
+                btn.innerText = 'RASTREAMENTO ÚNICO';
+                dadosMediaPipe = null;
+            }
+            zoomContainer.innerHTML = '';
         }
 
         async function loopProcessamento() {
@@ -158,87 +179,110 @@
                 canvas.height = video.videoHeight;
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 
-                frameCount++;
+                // Gerencia a limpeza de miniaturas antigas de zoom
+                zoomContainer.innerHTML = '';
 
-                // PASSO 1: A IA Só roda no início para capturar os alvos, ou a cada 90 frames (3 segundos) para recalibrar novas posições
-                if (alvosRastreados.length === 0 || frameCount % 90 === 0) {
-                    if (modeloAI) {
-                        const predicoes = await modeloAI.detect(video);
-                        alvosRastreados = []; // Limpa antigos alvos para pegar novos
+                if (modoOperacao === 'multiplo') {
+                    // MODO MÚLTIPLO REGULAR (COCO-SSD)
+                    if (modeloCOCO) {
+                        const predicoes = await modeloCOCO.detect(video);
                         
                         predicoes.forEach((objeto, idx) => {
                             if (alvosMilitar[objeto.class]) {
                                 let tagAlvo = alvosMilitar[objeto.class];
                                 const [x, y, largura, altura] = objeto.bbox;
-                                alvosRastreados.push({
-                                    id: idx + 100,
-                                    tag: tagAlvo,
-                                    score: objeto.score,
-                                    x: x, y: y,
-                                    w: largura, h: altura,
-                                    dx: 0, dy: 0 // Vetores de direção do movimento
-                                });
+                                
+                                desenharMiraMilitar(x, y, largura, altura, `TRK_${idx + 100}`, tagAlvo, objeto.score);
+                                criarMiniaturaZoom(x, y, largura, altura, tagAlvo);
                             }
                         });
                     }
                 } else {
-                    // PASSO 2: PIPELINE LEVE DE RASTREAMENTO MATEMÁTICO (Simulando o algoritmo de OpenCV por software)
-                    // Ele atualiza a posição analisando as variações físicas sem chamar o TensorFlow.js
-                    alvosRastreados.forEach(alvo => {
-                        // Aplica uma flutuação e suavização vetorial contínua baseada em movimentação inercial
-                        alvo.x += alvo.dx;
-                        alvo.y += alvo.dy;
+                    // MODO ÚNICO APERFEIÇOADO (MediaPipe Engine de Alta Velocidade)
+                    await rastreadorMediaPipe.send({ image: video });
+                    
+                    if (dadosMediaPipe && dadosMediaPipe.multiHandLandmarks && dadosMediaPipe.multiHandLandmarks.length > 0) {
+                        const pontos = dadosMediaPipe.multiHandLandmarks[0];
                         
-                        // Reduz ruídos de tracking de forma ultra leve
-                        alvo.dx *= 0.95;
-                        alvo.dy *= 0.95;
-                    });
-                }
+                        // Calcula o bounding box ao redor do alvo único detectado
+                        let minX = canvas.width, maxX = 0, minY = canvas.height, maxY = 0;
+                        pontos.forEach(p => {
+                            let px = p.x * canvas.width;
+                            let py = p.y * canvas.height;
+                            if (px < minX) minX = px; if (px > maxX) maxX = px;
+                            if (py < minY) minY = py; if (py > maxY) maxY = py;
+                        });
 
-                // PASSO 3: DESENHO DA INTERFACE TÁTICA MILITAR (60 FPS FLUIDOS)
-                alvosRastreados.forEach(alvo => {
-                    const centroX = alvo.x + (alvo.w / 2);
-                    const centroY = alvo.y + (alvo.h / 2);
+                        // Adiciona uma margem tática ao redor do ponto fixado
+                        let largura = (maxX - minX) * 1.5;
+                        let altura = (maxY - minY) * 1.5;
+                        let x = minX - (largura * 0.15);
+                        let y = minY - (altura * 0.15);
 
-                    // Desenha a mira militar quadrada estilo hacker
-                    ctx.strokeStyle = '#00FF00';
-                    ctx.lineWidth = 1.2;
-                    ctx.strokeRect(alvo.x, alvo.y, alvo.w, alvo.h);
-                    
-                    // Cantos destacados angulares
-                    ctx.fillStyle = '#00FF00';
-                    ctx.fillRect(alvo.x, alvo.y, 8, 2); ctx.fillRect(alvo.x, alvo.y, 2, 8);
-                    ctx.fillRect(alvo.x + alvo.w - 8, alvo.y, 8, 2); ctx.fillRect(alvo.x + alvo.w, alvo.y, 2, 8);
-                    ctx.fillRect(alvo.x, alvo.y + alvo.h, 8, 2); ctx.fillRect(alvo.x, alvo.y + alvo.h - 8, 2, 8);
-                    ctx.fillRect(alvo.x + alvo.w - 8, alvo.y + alvo.h, 8, 2); ctx.fillRect(alvo.x + alvo.w + 2, alvo.y + alvo.h - 8, 2, 8);
-
-                    // Tag identificadora limpa
-                    ctx.font = '10px monospace';
-                    ctx.fillText(`TRK_${alvo.id} // ${alvo.tag} [${Math.round(alvo.score * 100)}%]`, alvo.x + 3, alvo.y - 6);
-                    
-                    // Ponto fixo central
-                    ctx.beginPath(); ctx.arc(centroX, centroY, 4, 0, Math.PI * 2); ctx.fill();
-
-                    // Linha conectora estética até o centro do radar da tela
-                    ctx.strokeStyle = 'rgba(0, 255, 0, 0.15)';
-                    ctx.beginPath(); ctx.moveTo(centroX, centroY); ctx.lineTo(canvas.width / 2, canvas.height / 2); ctx.stroke();
-
-                    // Solta partículas atrás do rastro de movimento para visual futurista
-                    if(Math.abs(alvo.dx) > 0.1 || Math.abs(alvo.dy) > 0.1) {
-                        for (let i = 0; i < 2; i++) {
-                            particulas.push(new Particula(centroX, centroY));
-                        }
+                        desenharMiraMilitar(x, y, largura, altura, "SINGLE_LOCK", "HUMAN_TARGET", 0.99);
+                        criarMiniaturaZoom(x, y, largura, altura, "TARGET_LOCK");
                     }
-                });
-
-                // Atualiza as bolinhas do rastro
-                particulas = particulas.filter(p => p.vida > 0);
-                particulas.forEach(p => { p.atualizar(); p.desenhar(); });
+                }
             }
             requestAnimationFrame(loopProcessamento);
         }
 
-        // Funções da Interface de usuário
+        function desenharMiraMilitar(x, y, w, h, id, tag, score) {
+            const centroX = x + (w / 2);
+            const centroY = y + (h / 2);
+
+            ctx.strokeStyle = '#00FF00';
+            ctx.lineWidth = 1.2;
+            ctx.strokeRect(x, y, w, h);
+            
+            // Ângulos destacados nos quatro cantos
+            ctx.fillStyle = '#00FF00';
+            ctx.fillRect(x, y, 8, 2); ctx.fillRect(x, y, 2, 8);
+            ctx.fillRect(x + w - 8, y, 8, 2); ctx.fillRect(x + w, y, 2, 8);
+            ctx.fillRect(x, y + h, 8, 2); ctx.fillRect(x, y + h - 8, 2, 8);
+            ctx.fillRect(x + w - 8, y + h, 8, 2); ctx.fillRect(x + w + 2, y + h - 8, 2, 8);
+
+            // Tags textuais informativas
+            ctx.font = '10px monospace';
+            ctx.fillText(`${id} // ${tag} [${Math.round(score * 100)}%]`, x + 3, y - 6);
+            
+            // Ponto de Retícula interno
+            ctx.beginPath(); ctx.arc(centroX, centroY, 3, 0, Math.PI * 2); ctx.fill();
+
+            // Linha Conectora Estética apontada para o Centro da Tela
+            ctx.strokeStyle = 'rgba(0, 255, 0, 0.15)';
+            ctx.beginPath(); ctx.moveTo(centroX, centroY); ctx.lineTo(canvas.width / 2, canvas.height / 2); ctx.stroke();
+        }
+
+        // ENGENHARIA DE ZOOM DIGITAL EM TEMPO REAL
+        function criarMiniaturaZoom(x, y, w, h, etiqueta) {
+            // Cria os elementos do box dinamicamente
+            const box = document.createElement('div');
+            box.className = 'zoom-box';
+            
+            const miniCanvas = document.createElement('canvas');
+            miniCanvas.width = 75;
+            miniCanvas.height = 75;
+            
+            const label = document.createElement('div');
+            label.className = 'zoom-label';
+            label.innerText = etiqueta;
+
+            box.appendChild(miniCanvas);
+            box.appendChild(label);
+            zoomContainer.appendChild(box);
+
+            const mCtx = miniCanvas.getContext('2d');
+            
+            // Proteção contra caixas fora da área visível da câmera
+            if (w > 0 && h > 0) {
+                mCtx.clearRect(0, 0, 75, 75);
+                // drawImage(imagemOriginal, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight)
+                // Pega a região exata do vídeo da câmera e joga esticando no tamanho do mini mini-canvas
+                mCtx.drawImage(video, x, y, w, h, 0, 0, 75, 75);
+            }
+        }
+
         function alternarMenu() {
             const m = document.getElementById('menu-opcoes');
             m.style.display = m.style.display === 'flex' ? 'none' : 'flex';
