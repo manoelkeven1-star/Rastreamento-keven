@@ -353,4 +353,119 @@
                     elementoBox.style.left = `${posicoesSalvasBoxes[idBox].x}px`;
                     elementoBox.style.top = `${posicoesSalvasBoxes[idBox].y}px`;
 
-                 
+                                     let canvasMini = document.createElement('canvas');
+                    canvasMini.width = 90;
+                    canvasMini.height = 90;
+
+                    let labelMini = document.createElement('div');
+                    labelMini.className = 'zoom-label';
+                    labelMini.innerText = `V-ZOOM ${idx + 1}`;
+
+                    elementoBox.appendChild(canvasMini);
+                    elementoBox.appendChild(labelMini);
+                    containerZooms.appendChild(elementoBox);
+
+                    configurarArrastoMovivel(elementoBox, idBox);
+                }
+
+                let canvasInterno = elementoBox.querySelector('canvas');
+                let ctxInterno = canvasInterno.getContext('2d');
+                if (alvo.w > 0 && alvo.h > 0) {
+                    ctxInterno.clearRect(0, 0, 90, 90);
+                    ctxInterno.drawImage(video, alvo.x, alvo.y, alvo.w, alvo.h, 0, 0, 90, 90);
+                }
+
+                let dimBox = elementoBox.getBoundingClientRect();
+                let centroJanelaZoomX = dimBox.left + (dimBox.width / 2);
+                let centroJanelaZoomY = dimBox.top + (dimBox.height / 2);
+
+                let rectCanvasPrincipal = canvas.getBoundingClientRect();
+                let fatorX = canvas.width / rectCanvasPrincipal.width;
+                let fatorY = canvas.height / rectCanvasPrincipal.height;
+                
+                let lineX = (centroJanelaZoomX - rectCanvasPrincipal.left) * fatorX;
+                let lineY = (centroJanelaZoomY - rectCanvasPrincipal.top) * fatorY;
+
+                ctx.strokeStyle = 'rgba(0, 220, 255, 0.6)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([4, 4]); 
+                ctx.beginPath();
+                ctx.moveTo(centroAlvoX, centroAlvoY);
+                ctx.lineTo(lineX, lineY);
+                ctx.stroke();
+                ctx.setLineDash([]); 
+            });
+
+            let boxesExistentes = containerZooms.querySelectorAll('.zoom-box');
+            boxesExistentes.forEach(box => {
+                let idNum = parseInt(box.id.split('_')[1]);
+                if(idNum >= alvosDesteFrame.length) {
+                    box.remove();
+                }
+            });
+        }
+
+        function configurarArrastoMovivel(el, id) {
+            let ativo = false;
+            let currentX, currentY, initialX, initialY;
+            let xOffset = posicoesSalvasBoxes[id].x;
+            let yOffset = posicoesSalvasBoxes[id].y;
+
+            el.addEventListener("touchstart", dragStart, {passive: false});
+            el.addEventListener("touchend", dragEnd, {passive: false});
+            el.addEventListener("touchmove", drag, {passive: false});
+            el.addEventListener("mousedown", dragStart, false);
+            el.addEventListener("mouseup", dragEnd, false);
+            el.addEventListener("mousemove", drag, false);
+
+            function dragStart(e) {
+                if (e.type === "touchstart") {
+                    initialX = e.touches[0].clientX - xOffset;
+                    initialY = e.touches[0].clientY - yOffset;
+                } else {
+                    initialX = e.clientX - xOffset;
+                    initialY = e.clientY - yOffset;
+                }
+                ativo = true;
+            }
+
+            function dragEnd() {
+                initialX = currentX;
+                initialY = currentY;
+                ativo = false;
+                posicoesSalvasBoxes[id] = { x: xOffset, y: yOffset };
+            }
+
+            function drag(e) {
+                if (ativo) {
+                    e.preventDefault();
+                    if (e.type === "touchmove") {
+                        currentX = e.touches[0].clientX - initialX;
+                        currentY = e.touches[0].clientY - initialY;
+                    } else {
+                        currentX = e.clientX - initialX;
+                        currentY = e.clientY - initialY;
+                    }
+                    xOffset = currentX;
+                    yOffset = currentY;
+                    el.style.left = `${currentX}px`;
+                    el.style.top = `${currentY}px`;
+                }
+            }
+        }
+
+        function alternarMenu() {
+            const m = document.getElementById('menu-opcoes');
+            m.style.display = m.style.display === 'flex' ? 'none' : 'flex';
+        }
+        function abrirSobre() {
+            alternarMenu();
+            document.getElementById('painel-sobre').style.display = 'block';
+        }
+        function fecharSobre() {
+            document.getElementById('painel-sobre').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
+
